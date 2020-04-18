@@ -169,6 +169,11 @@ void eval(char *cmdline)
 
     parseline(cmdline, argv);
 
+    if(!builtin_cmd(argv))
+    {
+
+    }
+
     if(argv[0] == NULL)
         return;
     return;
@@ -237,6 +242,8 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(!strcmp(argv[0], "quit"))
+        exit(0);
     return 0;     /* not a builtin command */
 }
 
