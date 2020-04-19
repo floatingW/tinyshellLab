@@ -168,8 +168,10 @@ void eval(char *cmdline)
 {
     char *argv[MAXARGS]; /* Argument list */
     int bg; /* background flag */
+    int state = 0;
 
     bg = parseline(cmdline, argv);
+    state = (bg == 1) ? BG : FG;
     if(argv[0] == NULL)
         return;
 
@@ -196,7 +198,7 @@ void eval(char *cmdline)
         }
         
         sigprocmask(SIG_BLOCK, &mask_all, NULL); /* Block all */
-        addjob(jobs, pid_global, bg, cmdline);
+        addjob(jobs, pid_global, state, cmdline);
         sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
 
         if(!bg)
