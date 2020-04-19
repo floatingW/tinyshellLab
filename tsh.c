@@ -185,6 +185,7 @@ void eval(char *cmdline)
         sigprocmask(SIG_BLOCK, &mask_chld, &mask_prev); /* Block SIGCHLD */
         if((pid_global = fork()) == 0) /* Child process */
         {
+            Signal(SIGINT, SIG_DFL); /* recover default behaviour for child's sigint_handler */
             sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
             setpgid(0, 0); /* Put this child to a new process group */
             if(execve(argv[0], argv, NULL) < 0)
@@ -208,7 +209,7 @@ void eval(char *cmdline)
             waitfg(pid_global);
         } else
         {
-            printf("[%d] (%d) %s", getjobpid(jobs, pid_global)->jid, pid_global, cmdline);
+            fprintf(stdout, "[%d] (%d) %s", getjobpid(jobs, pid_global)->jid, pid_global, cmdline);
         }
         
     }
@@ -347,6 +348,15 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+    int errno_old = errno;
+    pid_t pid = fgpid(jobs); /* Current fg process */
+    if(kill(-pid, SIGINT) == -1)
+    {
+        unix_error("send SIGINT error");
+    }
+    errno = errno_old;
+    fprintf(stdout, "Job [%d] (%d) terminated by signal %d\n",
+            getjobpid(jobs, pid)->jid, pid, SIGINT);
     return;
 }
 
