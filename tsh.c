@@ -37,6 +37,7 @@
 
 /* Global variables */
 volatile sig_atomic_t pid_global; /* pid of new process */
+volatile sig_atomic_t pid_fg; /* pid of current fgprocess */
 extern char **environ;      /* defined in libc */
 char prompt[] = "tsh> ";    /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;            /* if true, print additional output */
@@ -204,8 +205,8 @@ void eval(char *cmdline)
 
         if(!bg)
         {
-            pid_global = 0; /* pid_global will be modified to a positive number
-                                while the current fg process terminates */
+            pid_fg = 0; /* pid_fg will be modified to the pid of fgprocess 
+                                while it terminates */
             waitfg(pid_global);
         } else
         {
@@ -303,7 +304,7 @@ void do_bgfg(char **argv)
 void waitfg(pid_t pid)
 {
     /* Use a busy loop to explicitly wait for a fg process to terminate */
-    while(!pid_global) /* while current fg process terminates, pid_global will
+    while(!pid_fg) /* while current fg process terminates, pid_global will
                         be modified to a positive number, then the loop stops */
     {
         sleep(1);
@@ -330,6 +331,10 @@ void sigchld_handler(int sig)
     if((pid_global = waitpid(-1, NULL, 0)) > 0)
     {
         sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+        if(pid_global == fgpid(jobs)) /* fg process */
+        {
+            pid_fg = pid_global;
+        }
         deletejob(jobs, pid_global);
         sigprocmask(SIG_SETMASK, &mask_prev, NULL);
     }
