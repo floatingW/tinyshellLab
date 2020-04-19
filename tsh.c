@@ -36,6 +36,7 @@
  */
 
 /* Global variables */
+volatile sig_atomic_t pid_global; /* pid of new process */
 extern char **environ;      /* defined in libc */
 char prompt[] = "tsh> ";    /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;            /* if true, print additional output */
@@ -166,27 +167,49 @@ int main(int argc, char **argv)
 void eval(char *cmdline) 
 {
     char *argv[MAXARGS]; /* Argument list */
-    pid_t pid;
+    int bg; /* background flag */
 
-    parseline(cmdline, argv);
+    bg = parseline(cmdline, argv);
+    if(argv[0] == NULL)
+        return;
+
+    __sigset_t mask_all, mask_chld, mask_prev;
+    __sigfillset(&mask_all);
+    __sigemptyset(&mask_chld);
+    __sigaddset(&mask_chld, SIGCHLD);
+    Signal(SIGCHLD, sigchld_handler);
 
     if(!builtin_cmd(argv))
     {
-        if((pid = fork()) == 0)
+        sigprocmask(SIG_BLOCK, &mask_chld, &mask_prev); /* Block SIGCHLD */
+        if((pid_global = fork()) == 0) /* Child process */
         {
+            sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
             if(execve(argv[0], argv, NULL) < 0)
             {
                 unix_error("execve error");
             }
         }
-        if(pid < 0)
+        if(pid_global < 0)
         {
             unix_error("fork error");
         }
-    }
+        
+        sigprocmask(SIG_BLOCK, &mask_all, NULL); /* Block all */
+        addjob(jobs, pid_global, bg, cmdline);
+        sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
 
-    if(argv[0] == NULL)
-        return;
+        if(!bg)
+        {
+            pid_global = 0; /* pid_global will be modified to a positive number
+                                while the current fg process terminates */
+            waitfg(pid_global);
+        } else
+        {
+            printf("[%d] (%d) %s", getjobpid(jobs, pid_global)->jid, pid_global, cmdline);
+        }
+        
+    }
     return;
 }
 
@@ -271,6 +294,12 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    /* Use a busy loop to explicitly wait for a fg process to terminate */
+    while(!pid_global) /* while current fg process terminates, pid_global will
+                        be modified to a positive number, then the loop stops */
+    {
+        sleep(1);
+    }
     return;
 }
 
@@ -287,6 +316,20 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    int errno_old = errno;
+    __sigset_t mask_all, mask_prev;
+    __sigfillset(&mask_all);
+    if((pid_global = waitpid(-1, NULL, 0)) > 0)
+    {
+        sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+        deletejob(jobs, pid_global);
+        sigprocmask(SIG_SETMASK, &mask_prev, NULL);
+    }
+    if(errno == ECHILD)
+    {
+        unix_error("waitpid error");
+    }
+    errno = errno_old;
     return;
 }
 
