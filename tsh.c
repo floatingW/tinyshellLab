@@ -166,12 +166,23 @@ int main(int argc, char **argv)
 void eval(char *cmdline) 
 {
     char *argv[MAXARGS]; /* Argument list */
+    pid_t pid;
 
     parseline(cmdline, argv);
 
     if(!builtin_cmd(argv))
     {
-
+        if((pid = fork()) == 0)
+        {
+            if(execve(argv[0], argv, NULL) < 0)
+            {
+                unix_error("execve error");
+            }
+        }
+        if(pid < 0)
+        {
+            unix_error("fork error");
+        }
     }
 
     if(argv[0] == NULL)
