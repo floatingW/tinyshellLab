@@ -177,7 +177,6 @@ void eval(char *cmdline)
     __sigfillset(&mask_all);
     __sigemptyset(&mask_chld);
     __sigaddset(&mask_chld, SIGCHLD);
-    Signal(SIGCHLD, sigchld_handler);
 
     if(!builtin_cmd(argv))
     {
@@ -185,6 +184,7 @@ void eval(char *cmdline)
         if((pid_global = fork()) == 0) /* Child process */
         {
             sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
+            setpgid(0, 0); /* Put this child to a new process group */
             if(execve(argv[0], argv, NULL) < 0)
             {
                 unix_error("execve error");
