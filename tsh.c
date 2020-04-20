@@ -37,7 +37,7 @@
 
 /* Global variables */
 volatile sig_atomic_t pid_global; /* pid of new process */
-volatile sig_atomic_t pid_fg; /* pid of current fgprocess */
+volatile sig_atomic_t wait_flag;
 extern char **environ;      /* defined in libc */
 char prompt[] = "tsh> ";    /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;            /* if true, print additional output */
@@ -186,7 +186,6 @@ void eval(char *cmdline)
         sigprocmask(SIG_BLOCK, &mask_chld, &mask_prev); /* Block SIGCHLD */
         if((pid_global = fork()) == 0) /* Child process */
         {
-            Signal(SIGINT, SIG_DFL); /* recover default behaviour for child's sigint_handler */
             sigprocmask(SIG_SETMASK, &mask_prev, NULL); /* Unblock SIGCHLD */
             setpgid(0, 0); /* Put this child to a new process group */
             if(execve(argv[0], argv, NULL) < 0)
@@ -205,8 +204,7 @@ void eval(char *cmdline)
 
         if(!bg)
         {
-            pid_fg = 0; /* pid_fg will be modified to the pid of fgprocess 
-                                while it terminates */
+            wait_flag = 1;
             waitfg(pid_global);
         } else
         {
@@ -304,8 +302,7 @@ void do_bgfg(char **argv)
 void waitfg(pid_t pid)
 {
     /* Use a busy loop to explicitly wait for a fg process to terminate */
-    while(!pid_fg) /* while current fg process terminates, pid_global will
-                        be modified to a positive number, then the loop stops */
+    while(wait_flag)
     {
         sleep(1);
     }
@@ -328,12 +325,12 @@ void sigchld_handler(int sig)
     int errno_old = errno;
     __sigset_t mask_all, mask_prev;
     __sigfillset(&mask_all);
-    if((pid_global = waitpid(-1, NULL, 0)) > 0)
+    if((pid_global = waitpid(-1, NULL, WNOHANG)) > 0) /* WNOHANG is necessary */
     {
         sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
         if(pid_global == fgpid(jobs)) /* fg process */
         {
-            pid_fg = pid_global;
+            wait_flag = 0;
         }
         deletejob(jobs, pid_global);
         sigprocmask(SIG_SETMASK, &mask_prev, NULL);
@@ -372,6 +369,23 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+    int errno_old = errno;
+    pid_t pid = fgpid(jobs); /* Current fg process */
+    if(pid == 0) return;
+
+    __sigset_t mask_all, mask_prev;
+    __sigfillset(&mask_all);
+    if(kill(-pid, SIGTSTP) == -1)
+    {
+        unix_error("send SIGTSTP error");
+    }
+    sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+    getjobpid(jobs, pid)->state = ST;
+    wait_flag = 0;
+    sigprocmask(SIG_SETMASK, &mask_prev, NULL);
+    errno = errno_old;
+    fprintf(stdout, "Job [%d] (%d) stopped by signal %d\n",
+            getjobpid(jobs, pid)->jid, pid, SIGTSTP);
     return;
 }
 
