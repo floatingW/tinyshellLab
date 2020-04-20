@@ -346,9 +346,27 @@ void do_bgfg(char **argv)
         fprintf(stdout, "[%d] (%d) %s", jid, pid, getjobpid(jobs, pid)->cmdline);
     } else                     /* fg process */
     {
-        //TO DO
+        int state = getjobpid(jobs, pid)->state;
+        if(state == ST)
+        {
+            if(kill(-pid, SIGCONT) == -1)
+            {
+                unix_error("send SIGCONT error");
+            }
+            sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+            getjobpid(jobs, pid)->state = FG;
+            sigprocmask(SIG_SETMASK, &mask_prev, NULL);
+            wait_flag = 1;
+            waitfg(pid);
+        } else
+        {
+            sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+            getjobpid(jobs, pid)->state = FG;
+            sigprocmask(SIG_SETMASK, &mask_prev, NULL);
+            wait_flag = 1;
+            waitfg(pid);
+        }
     }
-    
     return;
 }
 
