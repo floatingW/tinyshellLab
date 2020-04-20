@@ -285,6 +285,11 @@ int builtin_cmd(char **argv)
         listjobs(jobs);
         return 1;
     }
+    if(!strcmp(argv[0], "bg") || !strcmp(argv[0], "fg"))
+    {
+        do_bgfg(argv);
+        return 1;
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -293,6 +298,57 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
+    pid_t pid = 0;
+    int jid = 0;
+    if(argv[1][0] == '%') /* jid process */
+    {
+        jid = atoi(&argv[1][1]);
+        if(getjobjid(jobs, jid) == NULL)
+        {
+            char *head = "%";
+            fprintf(stdout, "%s%d: No such job\n", head, jid);
+            return;
+        } else
+        {
+            pid = getjobjid(jobs, jid)->pid;
+        }
+    } else if(isdigit(argv[1][0])) /* pid process */
+    {
+        pid = atoi(argv[1]);
+        jid = pid2jid(pid);
+        if(jid < 1)
+        {
+            fprintf(stdout, "(%d): No such process\n", pid);
+            return;
+        }
+    } else /* invalid input */
+    {
+        char *head = "%";
+        fprintf(stdout, "bg command requires PID or %sjobid argument\n", head);
+    }
+    
+    __sigset_t mask_all, mask_prev;
+    __sigfillset(&mask_all);
+    if(!strcmp(argv[0], "bg")) /* bg process */
+    {
+        int state = getjobpid(jobs, pid)->state;
+        if(state == BG) return;
+        else
+        {
+            if(kill(-pid, SIGCONT) == -1)
+            {
+                unix_error("send SIGCONT error");
+            }
+            sigprocmask(SIG_BLOCK, &mask_all, &mask_prev);
+            getjobpid(jobs, pid)->state = BG;
+            sigprocmask(SIG_SETMASK, &mask_prev, NULL);
+        }
+        fprintf(stdout, "[%d] (%d) %s", jid, pid, getjobpid(jobs, pid)->cmdline);
+    } else                     /* fg process */
+    {
+        //TO DO
+    }
+    
     return;
 }
 
