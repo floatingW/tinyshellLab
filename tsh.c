@@ -190,7 +190,8 @@ void eval(char *cmdline)
             setpgid(0, 0); /* Put this child to a new process group */
             if(execve(argv[0], argv, NULL) < 0)
             {
-                unix_error("execve error");
+                fprintf(stdout, "%s: Command not found\n", argv[0]);
+                exit(1);
             }
         }
         if(pid_global < 0)
@@ -300,12 +301,17 @@ void do_bgfg(char **argv)
 {
     pid_t pid = 0;
     int jid = 0;
+    char *head = "%";
+    if (argv[1] == NULL) /* no argument */
+    {
+        fprintf(stdout, "%s command requires PID or %sjobid argument\n", argv[0], head);
+        return;
+    }
     if(argv[1][0] == '%') /* jid process */
     {
         jid = atoi(&argv[1][1]);
         if(getjobjid(jobs, jid) == NULL)
         {
-            char *head = "%";
             fprintf(stdout, "%s%d: No such job\n", head, jid);
             return;
         } else
@@ -323,8 +329,8 @@ void do_bgfg(char **argv)
         }
     } else /* invalid input */
     {
-        char *head = "%";
-        fprintf(stdout, "bg command requires PID or %sjobid argument\n", head);
+        fprintf(stdout, "%s: argument must be a PID or %sjobid\n", argv[0], head);
+        return;
     }
     
     __sigset_t mask_all, mask_prev;
